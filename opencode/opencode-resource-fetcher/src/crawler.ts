@@ -1,4 +1,5 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { $ } from 'bun';
@@ -12,7 +13,6 @@ interface Extension {
   url: string;
   githubUrl?: string;
   lastUpdated?: string;
-  usage?: string;
   purpose?: string;
   tags?: string[];
 }
@@ -60,29 +60,89 @@ OpenCode Cafe 爬虫
   `);
 }
 
-async function getGitHubInfo(page: Page, githubUrl: string | undefined): Promise<{ lastUpdated?: string; usage?: string }> {
+function cleanReadmeContent(content: string): string {
+  let cleaned = content;
+  
+  cleaned = cleaned.replace(/!\[([^\]]*)\]\([^)]+\)/gi, '');
+  cleaned = cleaned.replace(/\[\]\([^)]+\)/gi, '');
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/gi, '$1');
+  cleaned = cleaned.replace(/<img[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  cleaned = cleaned.replace(/&[a-z]+;/gi, '');
+  cleaned = cleaned.replace(/^\s*[-*_]{3,}\s*$/gm, '');
+  cleaned = cleaned.replace(/^[-*_]{2,}$/gm, '');
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+  cleaned = cleaned.replace(/^#+\s*/gm, '');
+  cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
+  cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
+  cleaned = cleaned.replace(/^\s*[-+*]\s+/gm, '');
+  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
+  cleaned = cleaned.replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1');
+  cleaned = cleaned.replace(/\[[^\]]*\]:\s*https?:\/\/[^\n]+/g, '');
+  cleaned = cleaned.replace(/^\s*>\s*/gm, '');
+  cleaned = cleaned.replace(/\|.*\|/g, '');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  
+  const lines = cleaned.split('\n');
+  const filteredLines = lines.filter(line => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) return true;
+    if (trimmed.startsWith('[![') || trimmed.startsWith('![Badge]') || trimmed.startsWith('![GitHub')) return false;
+    if (trimmed.startsWith('[](')) return false;
+    if (trimmed.startsWith('|')) return false;
+    if (trimmed.startsWith('>')) return false;
+    if (/^https?:\/\//.test(trimmed)) return false;
+    if (trimmed.includes('shields.io') || trimmed.includes('badge')) return false;
+    if (trimmed.includes('✨') || trimmed.includes('🌟') || trimmed.includes('🚀')) return false;
+    if (/^[-*_]+$/.test(trimmed)) return false;
+    return true;
+  });
+  
+  cleaned = filteredLines.join('\n');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  
+  return cleaned.trim();
+}
+
+function containsInvalidContent(text: string): boolean {
+  if (!text) return true;
+  if (text.includes('![![') || text.includes('shields.io')) return true;
+  if (text.includes('data:image') || text.includes('base64')) return true;
+  if (/^\s*\[\]\(/.test(text)) return true;
+  const urlCount = (text.match(/https?:\/\//g) || []).length;
+  if (urlCount > 2) return true;
+  return false;
+}
+
+async function getGitHubInfo(page: Page, githubUrl: string | undefined): Promise<{ lastUpdated?: string; readmeContent?: string }> {
   const result = {
     lastUpdated: undefined as string | undefined,
-    usage: undefined as string | undefined,
+    readmeContent: undefined as string | undefined,
   };
 
   if (!githubUrl) return result;
 
   try {
-    const url = githubUrl.replace('github.com', 'raw.githubusercontent.com');
+    const match = githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!match) return result;
+    
+    const [, owner, repo] = match;
+    
+    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}`;
     const readmeUrls = [
-      `${url}/main/README.md`,
-      `${url}/main/readme.md`,
-      `${url}/master/README.md`,
-      `${url}/master/readme.md`,
+      `${rawUrl}/main/README.md`,
+      `${rawUrl}/main/readme.md`,
+      `${rawUrl}/master/README.md`,
+      `${rawUrl}/master/readme.md`,
     ];
 
     for (const readmeUrl of readmeUrls) {
       try {
         const response = await page.request.get(readmeUrl, { timeout: 15000 });
         if (response.ok()) {
-          const content = await response.text();
-          result.usage = content.slice(0, 5000);
+          const rawContent = await response.text();
+          result.readmeContent = cleanReadmeContent(rawContent);
           break;
         }
       } catch {
@@ -90,79 +150,113 @@ async function getGitHubInfo(page: Page, githubUrl: string | undefined): Promise
       }
     }
 
-    const commitsUrl = `${githubUrl.replace('github.com', 'api.github.com/repos')}/commits?per_page=1`;
     try {
-      const commitsResponse = await page.request.get(commitsUrl, {
-        headers: { 'User-Agent': 'OpenCode-Crawler' },
-        timeout: 10000
-      });
-      if (commitsResponse.ok()) {
-        const commits = await commitsResponse.json();
-        if (commits && commits[0] && commits[0].commit) {
-          result.lastUpdated = commits[0].commit.author.date;
+      const apiUrls = [
+        `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`,
+        `https://api.github.com/repos/${owner}/${repo}`,
+      ];
+      
+      for (const apiUrl of apiUrls) {
+        try {
+          const response = await page.request.get(apiUrl, {
+            headers: { 
+              'User-Agent': 'Mozilla/5.0',
+              'Accept': 'application/vnd.github.v3+json'
+            },
+            timeout: 10000
+          });
+          
+          if (response.ok()) {
+            const data = await response.json();
+            if (Array.isArray(data) && data[0]?.commit?.author?.date) {
+              result.lastUpdated = data[0].commit.author.date.split('T')[0];
+              break;
+            } else if (data?.pushed_at) {
+              result.lastUpdated = data.pushed_at.split('T')[0];
+              break;
+            } else if (data?.updated_at) {
+              result.lastUpdated = data.updated_at.split('T')[0];
+              break;
+            }
+          }
+        } catch {
+          continue;
         }
       }
     } catch {
-      // Ignore commit fetch errors
     }
-  } catch (err) {
-    console.error(`    ⚠️ GitHub info fetch error:`, err);
+  } catch {
   }
 
   return result;
 }
 
-async function summarizeWithOpenCode(content: string, type: 'usage' | 'purpose'): Promise<string> {
-  if (!content || content.length < 50) {
+function isChineseText(text: string): boolean {
+  if (!text) return false;
+  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+  return chineseChars > text.length * 0.3;
+}
+
+function isValidPurpose(text: string): boolean {
+  if (!text || text.length < 10) return false;
+  if (text.includes('|') || text.includes('> |')) return false;
+  if (text.includes('shields.io') || text.includes('badge')) return false;
+  if (/^[\s|>-]+$/.test(text)) return false;
+  const urlCount = (text.match(/https?:\/\//g) || []).length;
+  if (urlCount > 1) return false;
+  return true;
+}
+
+async function summarizePurpose(content: string, extName: string): Promise<string> {
+  if (!content || content.length < 20) {
     return '暂无';
   }
 
-  const prompt = type === 'usage' 
-    ? `请用中文简明扼要地总结以下内容中关于如何使用这个扩展的信息（50字以内）：\n\n${content.slice(0, 3000)}`
-    : `请用中文简明扼要地总结以下内容中关于这个扩展的用途和功能（50字以内）：\n\n${content.slice(0, 3000)}`;
+  const prompt = `请阅读以下关于 "${extName}" 项目的 README 内容，用中文写一段50字以内的项目简介。
+
+严格要求：
+1. 必须用完整的中文句子描述项目的主要功能和用途
+2. 不要输出任何英文、markdown语法、特殊符号或表情
+3. 如果README中没有有用的信息，直接回复"暂无"
+4. 只输出简介内容，不要有任何额外说明
+
+README 内容：
+${content.slice(0, 1200)}`;
 
   try {
-    console.log(`      → 调用 OpenCode 生成${type === 'usage' ? '使用方式' : '用途'}...`);
-    const result = await $`echo ${prompt} | opencode`.cwd('/tmp').quiet().timeout(30000).text();
-    if (result && result.trim().length > 5) {
-      console.log(`      ✓ OpenCode 返回成功`);
-      return result.trim().slice(0, 200);
+    const result = await $`echo ${prompt} | opencode`.cwd('/tmp').quiet().text();
+    if (result && result.trim().length > 10) {
+      const trimmed = result.trim();
+      if (isChineseText(trimmed) && isValidPurpose(trimmed)) {
+        return trimmed.slice(0, 80);
+      }
     }
-  } catch (err) {
-    console.log(`      ⚠️ OpenCode 调用失败或超时，使用 fallback`);
+  } catch {
   }
 
-  console.log(`      → 使用 fallback 方式提取...`);
-  // Fallback: simple extraction and translate to Chinese
-  const lines = content.split('\n').filter(l => l.trim().length > 10);
-  const keywords = type === 'usage' 
-    ? ['install', 'use', 'setup', 'config', 'npm', 'run', 'command', 'usage', 'how to', 'getting started']
-    : ['feature', 'function', 'for', 'allows', 'provides', 'about', 'description', 'overview'];
+  return extractPurposeFromReadme(content);
+}
+
+function extractPurposeFromReadme(content: string): string {
+  const lines = content.split('\n').filter(l => {
+    const trimmed = l.trim();
+    return trimmed.length > 20 && 
+           !trimmed.includes('shields.io') && 
+           !trimmed.includes('badge') &&
+           !trimmed.includes('license') &&
+           !trimmed.includes('install') &&
+           !trimmed.startsWith('|') &&
+           !trimmed.startsWith('>') &&
+           !/^https?:\/\//.test(trimmed);
+  });
   
-  const relevantLines: string[] = [];
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (keywords.some(k => lower.includes(k))) {
-      relevantLines.push(line.replace(/[#*`]/g, '').trim());
+  for (const line of lines.slice(0, 5)) {
+    const cleaned = line.replace(/[#*`|]/g, '').replace(/\s+/g, ' ').trim();
+    if (cleaned.length > 30 && isValidPurpose(cleaned)) {
+      return cleaned.slice(0, 80);
     }
   }
-
-  if (relevantLines.length > 0) {
-    const extracted = relevantLines.slice(0, 2).join(' ').slice(0, 150);
-    const translations: Record<string, string> = {
-      'install': '安装', 'usage': '使用', 'command': '命令', 'feature': '功能',
-      'allows': '允许', 'provides': '提供', 'config': '配置', 'setup': '设置',
-      'npm': 'npm', 'run': '运行', 'description': '描述', 'overview': '概述'
-    };
-    let translated = extracted;
-    for (const [en, zh] of Object.entries(translations)) {
-      translated = translated.replace(new RegExp(en, 'gi'), zh);
-    }
-    console.log(`      ✓ Fallback 提取成功`);
-    return translated;
-  }
-
-  console.log(`      ✗ 无法提取相关信息`);
+  
   return '暂无';
 }
 
@@ -365,21 +459,23 @@ async function generateReport(result: Result): Promise<void> {
           try {
             const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
             plugin.lastUpdated = githubInfo.lastUpdated;
-            console.log(`    → README 内容长度: ${githubInfo.usage?.length || 0}`);
+            console.log(`    → README 内容长度: ${githubInfo.readmeContent?.length || 0}`);
 
-            if (githubInfo.usage) {
-              console.log(`    → 正在使用 OpenCode 总结使用方式...`);
-              plugin.usage = await summarizeWithOpenCode(githubInfo.usage, 'usage');
+            if (githubInfo.readmeContent) {
               console.log(`    → 正在使用 OpenCode 总结用途...`);
-              plugin.purpose = await summarizeWithOpenCode(githubInfo.usage, 'purpose');
-              console.log(`    → 使用方式: ${plugin.usage?.slice(0, 50)}...`);
+              plugin.purpose = await summarizePurpose(githubInfo.readmeContent, plugin.name);
               console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
+            } else {
+              console.log(`    ⚠️ 无法获取 README 内容`);
+              plugin.purpose = '暂无';
             }
           } catch (e) {
             console.log(`    ⚠️ GitHub info error: ${e}`);
+            plugin.purpose = '暂无';
           }
         } else {
           console.log(`    → 跳过 GitHub 信息获取（无 GitHub 链接）`);
+          plugin.purpose = '暂无';
         }
       } catch (err) {
         console.error(`    ⚠️ Error processing ${plugin.name}:`, err);
@@ -404,7 +500,6 @@ async function generateReport(result: Result): Promise<void> {
 - **更新日期**: ${lastUpdated}
 - **链接**: [扩展详情](${plugin.url}) | ${githubLink}
 - **标签**: ${tagsStr}
-- **使用方式**: ${plugin.usage || '暂无'}
 - **用途**: ${plugin.purpose || '暂无'}
 
 ---

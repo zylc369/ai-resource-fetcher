@@ -1,0 +1,16 @@
+{
+  "name": "opencode-resource-fetcher",
+  "version": "1.0.0",
+  "description": "Crawler for opencode.cafe plugin marketplace",
+  "type": "module",
+  "scripts": {
+    "crawl": "bun run src/crawler.ts",
+    "install": "bun add playwright && bunx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.42.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

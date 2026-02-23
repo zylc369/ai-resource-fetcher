@@ -36,14 +36,25 @@ const OUTPUT_DIR = './output';
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
-  const limitArg = args.find(arg => arg.startsWith('--limit=') || arg.startsWith('-l='));
   let limit: number | undefined;
-  if (limitArg) {
-    const parsed = parseInt(limitArg.split('=')[1], 10);
+  
+  const limitEqIndex = args.findIndex(arg => arg.startsWith('--limit=') || arg.startsWith('-l='));
+  if (limitEqIndex !== -1) {
+    const limitStr = args[limitEqIndex].split('=')[1];
+    const parsed = parseInt(limitStr, 10);
     if (!isNaN(parsed) && parsed > 0) {
       limit = parsed;
     }
   }
+  
+  const limitIndex = args.findIndex(arg => arg === '--limit' || arg === '-l');
+  if (limitIndex !== -1 && limitIndex + 1 < args.length) {
+    const parsed = parseInt(args[limitIndex + 1], 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      limit = parsed;
+    }
+  }
+  
   return {
     count: args.includes('--count') || args.includes('-c'),
     report: args.includes('--report') || args.includes('-r'),
@@ -280,10 +291,16 @@ async function summarizePurpose(githubUrl: string, extName: string): Promise<str
     return '暂无';
   }
 
-  const readmeUrl = githubUrl
-    .replace('github.com/', 'raw.githubusercontent.com/')
-    .replace('/blob/main/', '/main/')
-    .replace('/blob/master/', '/master/');
+  let readmeUrl = githubUrl
+    .replace('github.com/', 'raw.githubusercontent.com/');
+  
+  if (!readmeUrl.includes('/main/') && !readmeUrl.includes('/master/')) {
+    readmeUrl = readmeUrl + '/main/README.md';
+  } else {
+    readmeUrl = readmeUrl
+      .replace('/blob/main/', '/main/')
+      .replace('/blob/master/', '/master/');
+  }
 
   return summarizeWithAI(readmeUrl, extName);
 }
@@ -296,7 +313,7 @@ async function summarizeWithAI(readmeUrl: string, extName: string): Promise<stri
     const result = await $`opencode run "${prompt}" -m opencode/big-pickle`.text();
     
     const cleaned = result
-      .replace(/^> build · big-pickle.*$/gm, '')
+      .replace(/^> build · .*$/gm, '')
       .replace(/^% WebFetch.*$/gm, '')
       // .replace(/^✱.*$/gm, '')
       // .replace(/^→.*$/gm, '')
@@ -329,6 +346,7 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
 
   const extensions: Extension[] = [];
   const byType: Record<string, number> = {};
+  let totalCount = 0;
 
   try {
     if (showProgress) console.log(`📄 Navigating to ${SEARCH_URL}...`);
@@ -341,14 +359,16 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
 
     let uniqueUrls = [...new Set(cards.filter((url) => url.startsWith('/plugin/')))];
     
+    totalCount = uniqueUrls.length;
+    const urlsToProcess = limit && limit > 0 ? uniqueUrls.slice(0, limit) : uniqueUrls;
+    
     if (limit && limit > 0) {
-      uniqueUrls = uniqueUrls.slice(0, limit);
-      if (showProgress) console.log(`📊 限制处理前 ${limit} 个扩展`);
+      if (showProgress) console.log(`📊 总计 ${totalCount} 个扩展，限制处理前 ${limit} 个`);
     }
 
-    if (showProgress) console.log(`📊 Found ${uniqueUrls.length} extension links, crawling details...`);
+    if (showProgress) console.log(`📊 Found ${urlsToProcess.length} extension links, crawling details...`);
 
-    for (const url of uniqueUrls) {
+    for (const url of urlsToProcess) {
       try {
         const fullUrl = `${BASE_URL}${url}`;
         await page.goto(fullUrl, { waitUntil: 'networkidle', timeout: 30000 });
@@ -409,6 +429,16 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
           tags: ext.tags,
         };
 
+        if (ext.githubUrl && showProgress) {
+          if (showProgress) console.log(`    → 正在总结用途...`);
+          try {
+            extension.purpose = await summarizePurpose(ext.githubUrl, extension.name);
+            if (showProgress) console.log(`    → 用途: ${extension.purpose?.slice(0, 30)}...`);
+          } catch (e) {
+            if (showProgress) console.log(`    ⚠️ 用途获取失败`);
+          }
+        }
+
         extensions.push(extension);
         byType[extension.type] = (byType[extension.type] || 0) + 1;
 
@@ -425,7 +455,7 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
   }
 
   const result: Result = {
-    total: extensions.length,
+    total: totalCount,
     byType,
     plugins: extensions,
   };
@@ -488,55 +518,62 @@ async function generateReport(result: Result): Promise<void> {
     reportContent += `\n## ${type}\n\n`;
 
     let processed = 0;
+    const totalToProcess = plugins.length;
     
     for (const plugin of plugins) {
       processed++;
-      console.log(`  📄 [${processed}/${plugins.length}] 处理: ${plugin.name}`);
-      console.log(`    → 正在访问扩展详情页...`);
+      const hasPurpose = plugin.purpose && plugin.purpose !== '暂无';
       
-      try {
-        await page.goto(plugin.url, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => null);
-        await page.waitForTimeout(300);
-        console.log(`    → 正在提取页面信息...`);
+      if (hasPurpose) {
+        console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name} (已有用途)`);
+        console.log(`    ✓ 已有用途数据`);
+      } else {
+        console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name}`);
+        console.log(`    → 正在访问扩展详情页...`);
+        try {
+          await page.goto(plugin.url, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => null);
+          await page.waitForTimeout(300);
+          console.log(`    → 正在提取页面信息...`);
 
-        const detail = await page.evaluate(() => {
-          const body = document.body.innerText;
-          const match = body.match(/([a-z0-9][a-z0-9\s-]*)\n\s*View Repository/i);
-          let tags: string[] = [];
-          if (match && match[1]) {
-            tags = match[1].split('\n').map(t => t.trim()).filter(t => t && t.length < 25);
-          }
-          
-          const viewRepoBtn = Array.from(document.querySelectorAll('a')).find(a => 
-            a.href.includes('github.com')
-          );
-          const githubUrl = viewRepoBtn?.href;
+          const detail = await page.evaluate(() => {
+            const body = document.body.innerText;
+            const match = body.match(/([a-z0-9][a-z0-9\s-]*)\n\s*View Repository/i);
+            let tags: string[] = [];
+            if (match && match[1]) {
+              tags = match[1].split('\n').map(t => t.trim()).filter(t => t && t.length < 25);
+            }
+            
+            const viewRepoBtn = Array.from(document.querySelectorAll('a')).find(a => 
+              a.href.includes('github.com')
+            );
+            const githubUrl = viewRepoBtn?.href;
 
-          return { tags, githubUrl };
-        });
+            return { tags, githubUrl };
+          });
 
-        plugin.githubUrl = plugin.githubUrl || detail.githubUrl;
-        plugin.tags = plugin.tags || detail.tags;
-        console.log(`    → GitHub: ${plugin.githubUrl || '无'}`);
+          plugin.githubUrl = plugin.githubUrl || detail.githubUrl;
+          plugin.tags = plugin.tags || detail.tags;
+          console.log(`    → GitHub: ${plugin.githubUrl || '无'}`);
 
-        if (plugin.githubUrl) {
-          console.log(`    → 正在总结用途...`);
-          try {
-            const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
-            plugin.lastUpdated = githubInfo.lastUpdated;
+          if (plugin.githubUrl) {
+            console.log(`    → 正在总结用途...`);
+            try {
+              const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
+              plugin.lastUpdated = githubInfo.lastUpdated;
 
-            plugin.purpose = await summarizePurpose(plugin.githubUrl, plugin.name);
-            console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
-          } catch (e) {
-            console.log(`    ⚠️ GitHub info error: ${e}`);
+              plugin.purpose = await summarizePurpose(plugin.githubUrl, plugin.name);
+              console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
+            } catch (e) {
+              console.log(`    ⚠️ GitHub info error: ${e}`);
+              plugin.purpose = '暂无';
+            }
+          } else {
+            console.log(`    → 跳过 GitHub 信息获取（无 GitHub 链接）`);
             plugin.purpose = '暂无';
           }
-        } else {
-          console.log(`    → 跳过 GitHub 信息获取（无 GitHub 链接）`);
-          plugin.purpose = '暂无';
+        } catch (err) {
+          console.error(`    ⚠️ Error processing ${plugin.name}:`, err);
         }
-      } catch (err) {
-        console.error(`    ⚠️ Error processing ${plugin.name}:`, err);
       }
 
       console.log(`    ✓ 完成 ${plugin.name}\n`);
@@ -607,15 +644,19 @@ async function main() {
   }
 
   let result: Result;
-  const shouldUseExistingData = args.report && existingData && existingData.plugins.length > 0 && !args.limit;
+  const hasValidLimit = args.limit && args.limit > 0;
+  const existingDataMatchesLimit = existingData && existingData.plugins.length >= (args.limit || Infinity);
+  const shouldUseExistingData = args.report && existingData && existingData.plugins.length > 0 && !hasValidLimit;
+  
   if (shouldUseExistingData) {
     console.log('📂 使用已有的爬取数据...');
     result = existingData;
   } else {
-    if (args.limit) {
+    if (hasValidLimit) {
       console.log(`📂 忽略已有数据，使用 --limit=${args.limit} 重新爬取...`);
     }
-    result = await crawlExtensions(!args.report, args.limit);
+    const showProgressForCrawl = hasValidLimit ? true : !args.report;
+    result = await crawlExtensions(showProgressForCrawl, args.limit);
   }
 
   if (args.report) {

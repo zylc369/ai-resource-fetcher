@@ -18,9 +18,7 @@
         "web",
         "opencode",
         "sessions"
-      ],
-      "purpose": "这是一个用于查看OpenCode会话记录的Web工具。它可以在本地启动一个Web服务器（默认端口3456），让你通过浏览器查看OpenCode的工作会话内容。使用方式很简单，可以通过`npx opensession`直接运行，或全局安装后使用`opensession`命令启动。该项目开源托管在GitHub上，欢迎开发者贡献代码。",
-      "readmeUrl": "https://raw.githubusercontent.com/R44VC0RP/opensession/main/README.md"
+      ]
     },
     {
       "id": "openportal",
@@ -33,9 +31,7 @@
       "tags": [
         "web",
         "ui"
-      ],
-      "purpose": "这是一个为OpenCode AI编程助手打造的Web端移动优先界面。由于官方自带的Web UI目前不支持移动端响应式访问，该项目解决了在手机或平板上远程使用OpenCode的需求。用户可以将Portal和OpenCode一起部署在VPS上，通过Tailscale等VPN连接实现安全远程访问。主要功能包括：创建和管理对话会话、与AI进行实时聊天、支持@文件名引用文件、选择不同模型、切换明暗主题。技术栈使用React Router、IntentUI、Tailwind CSS和Nitro服务器，搭配OpenCode SDK实现API交互。",
-      "readmeUrl": "https://raw.githubusercontent.com/hosenur/portal/main/README.md"
+      ]
     },
     {
       "id": "opencode-pty",
@@ -49,9 +45,7 @@
         "pty",
         "background",
         "process"
-      ],
-      "purpose": "这是一个OpenCode插件，提供交互式伪终端（PTY）管理功能。它让AI代理能够运行后台进程、发送交互输入并随时读取输出，解决了OpenCode内置bash工具只能同步等待命令完成的局限。该插件支持：后台执行长期运行的进程（如开发服务器npm run dev、监视模式npm test -- --watch）；同时管理多个终端会话；向终端发送按键、Ctrl+C、方向键等交互输入；通过分页和正则表达式过滤读取输出；进程结束时自动通知；提供现代化的React Web界面，通过WebSocket实时显示输出。用户可通过pty_spawn、pty_write、pty_read、pty_list、pty_kill等工具与终端交互，也可使用/pty-open-background-spy命令打开Web监控界面。",
-      "readmeUrl": "https://raw.githubusercontent.com/shekohex/opencode-pty/main/README.md"
+      ]
     },
     {
       "id": "opencode-antigravity-auth",
@@ -72,9 +66,7 @@
         "claude",
         "opus",
         "sonnet"
-      ],
-      "purpose": "这是一个OpenCode插件，通过OAuth认证让用户使用Google账户访问Antigravity（Google AI IDE）的API配额，从而可以在OpenCode中调用Claude Opus 4.6、Sonnet 4.6和Gemini 3 Pro/Flash等模型。该插件支持多Google账户添加和自动切换，当一个账户达到速率限制时会切换到其他账户。它还提供双重配额系统，同时兼容Antigravity和Gemini CLI的配额，并支持Claude和Gemini的思考模型（可配置思考预算）以及Gemini的Google Search联网搜索功能。插件具有自动恢复机制，可处理会话错误和工具失败，并与oh-my-opencode等其他OpenCode插件兼容。需要注意的是，使用此插件可能违反Google服务条款，存在账户被封禁或限制的风险，尤其是新账户和高价订阅账户风险更高。",
-      "readmeUrl": "https://raw.githubusercontent.com/NoeFabris/opencode-antigravity-auth/main/README.md"
+      ]
     },
     {
       "id": "opencode-helicone-session",
@@ -90,10 +82,7 @@
         "analytics",
         "observability",
         "session-tracking"
-      ],
-      "purpose": "这是一个OpenCode插件，用于自动将Helicone会话头注入到LLM请求中，从而将同一OpenCode会话的所有请求在Helicone仪表板中分组在一起。插件会监听OpenCode会话事件，在每次LLM请求时自动添加`Helicone-Session-Id`（基于会话ID的一致UUID）和`Helicone-Session-Name`（会话标题）两个请求头。用户只需在opencode.json中配置插件即可使用，无需额外操作。如果配置中已指定自定义的Helicone会话头，插件不会覆盖它们。使用该插件需要OpenCode v0.15.0或更高版本以及Helicone账户。",
-      "readmeUrl": "https://raw.githubusercontent.com/H2Shami/opencode-helicone-session/main/README.md"
+      ]
     }
-  ],
-  "lastFetched": "2026-02-23T08:08:23.359Z"
+  ]
 }

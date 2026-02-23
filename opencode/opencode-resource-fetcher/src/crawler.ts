@@ -207,57 +207,102 @@ function isValidPurpose(text: string): boolean {
   return true;
 }
 
-async function summarizePurpose(content: string, extName: string): Promise<string> {
-  if (!content || content.length < 20) {
-    return '暂无';
-  }
-
-  const prompt = `请阅读以下关于 "${extName}" 项目的 README 内容，用中文写一段50字以内的项目简介。
-
-严格要求：
-1. 必须用完整的中文句子描述项目的主要功能和用途
-2. 不要输出任何英文、markdown语法、特殊符号或表情
-3. 如果README中没有有用的信息，直接回复"暂无"
-4. 只输出简介内容，不要有任何额外说明
-
-README 内容：
-${content.slice(0, 1200)}`;
-
-  try {
-    const result = await $`echo ${prompt} | opencode`.cwd('/tmp').quiet().text();
-    if (result && result.trim().length > 10) {
-      const trimmed = result.trim();
-      if (isChineseText(trimmed) && isValidPurpose(trimmed)) {
-        return trimmed.slice(0, 80);
-      }
-    }
-  } catch {
-  }
-
-  return extractPurposeFromReadme(content);
-}
-
-function extractPurposeFromReadme(content: string): string {
+function extractPurposeFromReadme(content: string, extName: string): string {
   const lines = content.split('\n').filter(l => {
     const trimmed = l.trim();
-    return trimmed.length > 20 && 
-           !trimmed.includes('shields.io') && 
-           !trimmed.includes('badge') &&
-           !trimmed.includes('license') &&
-           !trimmed.includes('install') &&
+    const lower = trimmed.toLowerCase();
+    return trimmed.length > 30 && 
+           !lower.includes('shields.io') && 
+           !lower.includes('badge') &&
+           !lower.includes('license') &&
+           !lower.includes('install') &&
+           !lower.includes('npm install') &&
+           !lower.includes('yarn add') &&
+           !lower.includes('bun add') &&
            !trimmed.startsWith('|') &&
            !trimmed.startsWith('>') &&
-           !/^https?:\/\//.test(trimmed);
+           !trimmed.startsWith('![') &&
+           !trimmed.startsWith('[![') &&
+           !/^https?:\/\//.test(trimmed) &&
+           !trimmed.includes('```');
   });
   
-  for (const line of lines.slice(0, 5)) {
-    const cleaned = line.replace(/[#*`|]/g, '').replace(/\s+/g, ' ').trim();
+  for (const line of lines.slice(0, 3)) {
+    let cleaned = line
+      .replace(/[#*`|]/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
     if (cleaned.length > 30 && isValidPurpose(cleaned)) {
-      return cleaned.slice(0, 80);
+      const lower = cleaned.toLowerCase();
+      if (lower.includes(extName.toLowerCase()) || 
+          lower.includes('plugin') ||
+          lower.includes('tool') ||
+          lower.includes('extension') ||
+          lower.includes('opencode') ||
+          lower.includes('mcp') ||
+          lower.includes('server')) {
+        return cleaned.slice(0, 100);
+      }
+    }
+  }
+  
+  for (const line of lines.slice(0, 5)) {
+    let cleaned = line
+      .replace(/[#*`|]/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (cleaned.length > 30 && isValidPurpose(cleaned)) {
+      return cleaned.slice(0, 100);
     }
   }
   
   return '暂无';
+}
+
+async function summarizePurpose(content: string, extName: string): Promise<string> {
+  if (!content || content.length < 20) {
+    return '暂无';
+  }
+  
+  return summarizeWithAI(content, extName);
+}
+
+async function summarizeWithAI(content: string, extName: string): Promise<string> {
+  try {
+    const prompt = `用简洁的中文（30-50字）总结这个 OpenCode 扩展的用途，直接返回总结，不需要任何格式或前缀。`;
+    
+    const result = await $`echo "${content.slice(0, 2000)}" | opencode run "${prompt}" -m opencode/big-pickle`.text();
+    
+    const cleaned = result
+      .replace(/^> build · big-pickle.*$/gm, '')
+      .replace(/^% WebFetch.*$/gm, '')
+      .replace(/^✱.*$/gm, '')
+      .replace(/^→.*$/gm, '')
+      .replace(/^需要先.*$/gm, '')
+      .replace(/^提供.*/gm, (match) => match)
+      .replace(/^\d+:/gm, '')
+      .replace(/^itschel.*$/gm, '')
+      .replace(/^\[.*m$/gm, '')
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+    
+    const lines = cleaned.split('\n').filter(l => l.trim().length > 0);
+    const summary = lines[lines.length - 1] || lines[0] || '';
+    
+    if (summary.length > 5) {
+      return summary.slice(0, 100);
+    }
+    
+    return extractPurposeFromReadme(content, extName);
+  } catch (error) {
+    console.error(`  ⚠️ AI summarization error: ${error}`);
+    return extractPurposeFromReadme(content, extName);
+  }
 }
 
 async function crawlExtensions(showProgress = true): Promise<Result> {
@@ -462,7 +507,7 @@ async function generateReport(result: Result): Promise<void> {
             console.log(`    → README 内容长度: ${githubInfo.readmeContent?.length || 0}`);
 
             if (githubInfo.readmeContent) {
-              console.log(`    → 正在使用 OpenCode 总结用途...`);
+              console.log(`    → 正在总结用途...`);
               plugin.purpose = await summarizePurpose(githubInfo.readmeContent, plugin.name);
               console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
             } else {

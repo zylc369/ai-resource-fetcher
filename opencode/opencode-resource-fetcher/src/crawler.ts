@@ -350,10 +350,13 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
   let totalCount = 0;
 
   try {
-    if (showProgress) console.log(`📄 Navigating to ${SEARCH_URL}...`);
-    await page.goto(SEARCH_URL, { waitUntil: 'networkidle', timeout: 60000 });
+    if (showProgress) console.log(`📄 Step 1/4: Navigating to ${SEARCH_URL}...`);
+    await page.goto(SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForSelector('[data-extension-id], a[href^="/plugin/"]', { timeout: 10000 }).catch(() => {});
+    if (showProgress) console.log('📄 Step 2/4: Waiting for page to render...');
     await page.waitForTimeout(3000);
 
+    if (showProgress) console.log('📄 Step 3/4: Finding extension cards...');
     const cards = await page.locator('[data-extension-id], a[href^="/plugin/"]').evaluateAll((elements) => {
       return elements.map((el) => el.getAttribute('href')).filter(Boolean) as string[];
     });
@@ -367,13 +370,18 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
       if (showProgress) console.log(`📊 总计 ${totalCount} 个扩展，限制处理前 ${limit} 个`);
     }
 
-    if (showProgress) console.log(`📊 Found ${urlsToProcess.length} extension links, crawling details...`);
+    if (showProgress) console.log(`📊 Step 4/4: Found ${urlsToProcess.length} extension links, crawling details...`);
 
-    for (const url of urlsToProcess) {
+    for (let i = 0; i < urlsToProcess.length; i++) {
+      const url = urlsToProcess[i];
       try {
+        if (showProgress) console.log(`  📄 [${i + 1}/${urlsToProcess.length}] Opening ${url}...`);
         const fullUrl = `${BASE_URL}${url}`;
-        await page.goto(fullUrl, { waitUntil: 'networkidle', timeout: 30000 });
-        await page.waitForTimeout(800);
+        if (showProgress) console.log(`    → Navigating to ${fullUrl}...`);
+        await page.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForSelector('h1', { timeout: 10000 }).catch(() => {});
+        if (showProgress) console.log(`    → Extracting data...`);
+        await page.waitForTimeout(2000);
 
         const ext = await page.evaluate((pageUrl) => {
           const name = document.querySelector('h1')?.textContent?.trim() || 
@@ -403,7 +411,7 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
           const match = body.match(/([a-z0-9,\s-]+)\n\s*View Repository/i);
           let tags: string[] = [];
           if (match && match[1]) {
-            tags = match[1].split('\n').map(t => t.trim()).filter(t => t && t.length < 20);
+            tags = match[1].split('\n').map((t: string) => t.trim()).filter((t: string) => t && t.length < 20);
           }
           
           const urlType = pageUrl.split('/').pop() || '';
@@ -594,22 +602,16 @@ async function main() {
   }
 
   let result: Result;
-  const hasValidLimit = args.limit && args.limit > 0;
-  const existingDataMatchesLimit = existingData && existingData.plugins.length >= (args.limit || Infinity);
-  const shouldUseExistingData = args.report && existingData && existingData.plugins.length > 0 && !hasValidLimit;
-  
-  if (shouldUseExistingData) {
-    console.log('📂 使用已有的爬取数据...');
-    result = existingData;
-  } else {
-    if (hasValidLimit) {
-      console.log(`📂 忽略已有数据，使用 --limit=${args.limit} 重新爬取...`);
-    }
-    const showProgressForCrawl = hasValidLimit ? true : !args.report;
-    result = await crawlExtensions(showProgressForCrawl, args.limit);
-  }
 
   if (args.report) {
+    console.log('🔄 正在爬取扩展数据...');
+    console.log('📡 步骤1: 导航到搜索页面...');
+  }
+
+  result = await crawlExtensions(true, args.limit);
+
+  if (args.report) {
+    console.log('✅ 爬取完成，开始生成报告...\n');
     await generateReport(result, !!args.limit);
     console.log(`\n✅ 报告已生成: ${join(OUTPUT_DIR, 'report.md')}`);
   }

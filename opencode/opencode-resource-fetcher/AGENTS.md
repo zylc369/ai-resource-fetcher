@@ -30,87 +30,60 @@ bunx tsc --noEmit         # Run TypeScript compiler check
 No lint configuration currently exists. Consider adding ESLint or Biome if needed.
 
 ### Testing
-No test framework is currently set up. Tests would use Playwright (already a dependency).
+```bash
+bun add -D @playwright/test    # Install test framework
+bunx playwright install chromium # Ensure browser installed
+bun test                       # Run all tests
+bun test tests/                # Run tests in directory
+bun test tests/crawler.spec.ts # Run single test file
+bun test --ui                  # Run with interactive UI
+```
+
+### Debugging
+If the crawler hangs, use `--limit` for quick testing:
+```bash
+bun run crawl --limit=3        # Process only 3 extensions
+bun run crawl --report --limit=5  # Generate report with 5 items
+```
 
 ## Code Style Guidelines
 
 ### Language & Runtime
-- Use **TypeScript** with strict mode enabled
-- Use **Bun** as the runtime (ESM modules)
-- Target ESNext/ESNext modules
-
-### TypeScript Configuration (tsconfig.json)
-```json
-{
-  "strict": true,
-  "module": "ESNext",
-  "moduleResolution": "bundler",
-  "verbatimModuleSyntax": true,
-  "noEmit": true
-}
-```
+- Use **TypeScript** with strict mode, ESM modules, **Bun** runtime
 
 ### Imports
-- Use ESM import syntax
-- Separate built-in, external, and local imports with blank lines
-- Use type imports where appropriate
+- ESM syntax, separate groups with blank lines, use type imports:
 ```typescript
 import { chromium } from 'playwright';
 import type { Browser, Page } from 'playwright';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { $ } from 'bun';
 ```
 
-### Naming Conventions
-- **Interfaces**: PascalCase, prefix with meaningful name (e.g., `Extension`, `Result`, `CliArgs`)
-- **Types**: PascalCase (e.g., `CliArgs`)
-- **Functions**: camelCase (e.g., `parseArgs`, `cleanReadmeContent`)
-- **Variables**: camelCase (e.g., `baseUrl`, `extensions`)
-- **Constants**: UPPER_SNAKE_CASE or camelCase (e.g., `BASE_URL`, `OUTPUT_DIR`)
+### Naming
+- Interfaces/Types: PascalCase (e.g., `Extension`, `CliArgs`)
+- Functions/Variables: camelCase (e.g., `parseArgs`, `baseUrl`)
+- Constants: UPPER_SNAKE_CASE or camelCase (e.g., `BASE_URL`)
 
-### Interfaces & Types
-- Define interfaces for all data structures
-- Use optional properties with `?` when needed
+### Interfaces
+- Define interfaces for all data structures, use `?` for optional:
 ```typescript
 interface Extension {
   id: string;
   name: string;
-  description: string;
   type: string;
   author: string;
   url: string;
   githubUrl?: string;
-  lastUpdated?: string;
-  purpose?: string;
   tags?: string[];
 }
 ```
 
 ### Formatting
-- Use 2 spaces for indentation
-- Use single quotes for strings
-- Add trailing commas in multiline objects/arrays
-- Maximum line length: 120 characters (soft limit)
-- Use blank lines to separate logical code sections
+- 2 spaces indent, single quotes, trailing commas, max 120 chars
 
 ### Error Handling
-- Use try/catch blocks for async operations
-- Provide meaningful error messages in console.error
-- Use optional chaining (`?.`) and nullish coalescing (`??`) to handle undefined values
-- Return early to reduce nesting
-```typescript
-try {
-  const response = await page.request.get(readmeUrl, { timeout: 15000 });
-  if (response.ok()) {
-    const rawContent = await response.text();
-    result.readmeContent = cleanReadmeContent(rawContent);
-    break;
-  }
-} catch {
-  continue;
-}
-```
+- Try/catch for async, meaningful errors, optional chaining (`?.`), return early
 
 ### Async/Await
 - Always use async/await for asynchronous operations
@@ -124,11 +97,6 @@ try {
 - Helper functions above main logic
 - Group related interfaces/types at the top
 
-### String Handling
-- Use template literals for string interpolation
-- Use descriptive variable names
-- Handle edge cases (empty strings, null, undefined)
-
 ### Output & Logging
 - Use emoji prefixes for console output (🚀, 📄, ✅, ❌)
 - Provide progress information for long-running operations
@@ -138,24 +106,20 @@ try {
 - Launch browser with `headless: true` for CI/automation
 - Always close browser in finally block
 - Use appropriate timeouts for page operations
-- Use `waitUntil: 'networkidle'` for page navigation when needed
+- Use `waitUntil: 'load'` instead of 'networkidle' (more reliable)
 
 ## Project Structure
 
 ```
 opencode-resource-fetcher/
-├── src/
-│   └── crawler.ts          # Main crawler implementation
-├── output/
-│   ├── extensions.json     # Crawled extension data
-│   └── report.md           # Generated analysis report
+├── src/crawler.ts          # Main crawler implementation
+├── output/                 # Crawled data and reports
 ├── package.json
 ├── tsconfig.json
 └── bun.lock
 ```
 
 ## Output Format
-
 The crawler generates `output/extensions.json` with the following structure:
 ```json
 {
@@ -189,14 +153,10 @@ The crawler generates `output/extensions.json` with the following structure:
 1. Find the `page.evaluate()` call in `crawlExtensions()`
 2. Update the selector logic for the required fields
 
-### Changing output format
-1. Modify the `Extension` interface
-2. Update relevant functions that populate the data
-
 ## Notes for AI Agents
 
 - This project uses **Bun** exclusively - do not use npm or yarn
 - The crawler uses Playwright for browser automation
 - Output is written to `./output/` directory
-- No tests currently exist - consider adding Playwright tests for robustness
-- The codebase is relatively small (~600 lines) - full file understanding is feasible
+- Add progress logs when debugging crawler issues
+- Use `--limit=N` flag to test with fewer extensions

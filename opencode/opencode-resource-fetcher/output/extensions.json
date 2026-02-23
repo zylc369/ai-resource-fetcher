@@ -3,7 +3,7 @@
   "byType": {
     "Tool": 1,
     "Web View": 1,
-    "Plugin": 3
+    "Plugin": 1
   },
   "plugins": [
     {
@@ -45,43 +45,6 @@
         "pty",
         "background",
         "process"
-      ]
-    },
-    {
-      "id": "opencode-antigravity-auth",
-      "name": "Opencode Antigravity Auth",
-      "description": "Submitted by Noè · Published December 18, 2025",
-      "type": "Plugin",
-      "author": "Plugin",
-      "url": "https://www.opencode.cafe/plugin/opencode-antigravity-auth",
-      "githubUrl": "https://github.com/NoeFabris/opencode-antigravity-auth",
-      "tags": [
-        "opencode",
-        "plugin",
-        "auth",
-        "oauth",
-        "google",
-        "antigravity",
-        "gemini",
-        "claude",
-        "opus",
-        "sonnet"
-      ]
-    },
-    {
-      "id": "opencode-helicone-session",
-      "name": "OpenCode Helicone Session",
-      "description": "Submitted by Ryan Vogel · Published December 18, 2025",
-      "type": "Plugin",
-      "author": "Plugin",
-      "url": "https://www.opencode.cafe/plugin/opencode-helicone-session",
-      "githubUrl": "https://github.com/H2Shami/opencode-helicone-session",
-      "tags": [
-        "s dashboard",
-        "helicone",
-        "analytics",
-        "observability",
-        "session-tracking"
       ]
     }
   ]

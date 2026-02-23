@@ -306,6 +306,7 @@ async function summarizePurpose(githubUrl: string, extName: string): Promise<str
 }
 
 async function summarizeWithAI(readmeUrl: string, extName: string): Promise<string> {
+  console.log(`    📄 README URL: ${readmeUrl}`);
   try {
     // const prompt = `读取${readmeUrl}文件内容，用中文总结它的用途、主要的功能特性，返回MarkDown格式的总结内容（!!!重要：不要返回H1、H2这种标题格式!!!）。`;
     const prompt = `读取${readmeUrl}文件内容，用简洁的中文（500字以内）总结这个 OpenCode 扩展的用途，直接返回总结，不需要任何格式或前缀。`
@@ -463,23 +464,12 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
   return result;
 }
 
-async function generateReport(result: Result): Promise<void> {
+async function generateReport(result: Result, forceRefresh = false): Promise<void> {
   console.log('\n📝 正在生成中文分析报告...');
   
   if (!existsSync(OUTPUT_DIR)) {
     mkdirSync(OUTPUT_DIR, { recursive: true });
   }
-
-  let browser: Browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-  } catch (e) {
-    console.error('Failed to launch browser:', e);
-    return;
-  }
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
 
   // Group plugins by type
   const pluginsByType: Record<string, Extension[]> = {};
@@ -513,63 +503,25 @@ async function generateReport(result: Result): Promise<void> {
     for (const plugin of plugins) {
       processed++;
       console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name}`);
-      console.log(`    → 正在访问扩展详情页...`);
-      try {
-        await page.goto(plugin.url, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => null);
-        await page.waitForTimeout(500);
-        console.log(`    → 正在提取页面信息...`);
 
-        let detail = { tags: [] as string[], githubUrl: undefined as string | undefined };
+      if (plugin.githubUrl) {
+        console.log(`    → GitHub: ${plugin.githubUrl}`);
+        console.log(`    → 正在总结用途...`);
         try {
-          const detailPromise = page.evaluate(() => {
-            const body = document.body.innerText;
-            const match = body.match(/([a-z0-9][a-z0-9\s-]*)\n\s*View Repository/i);
-            let tags: string[] = [];
-            if (match && match[1]) {
-              tags = match[1].split('\n').map(t => t.trim()).filter(t => t && t.length < 25);
-            }
-            
-            const viewRepoBtn = Array.from(document.querySelectorAll('a')).find(a => 
-              a.href.includes('github.com')
-            );
-            const githubUrl = viewRepoBtn?.href;
-
-            return { tags, githubUrl };
-          });
-          
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('evaluate timeout')), 5000)
+          const purposePromise = summarizePurpose(plugin.githubUrl, plugin.name);
+          const timeoutPromise = new Promise<string>((_, reject) => 
+            setTimeout(() => reject(new Error('summarize timeout')), 60000)
           );
           
-          detail = await Promise.race([detailPromise, timeoutPromise]) as typeof detail;
+          plugin.purpose = await Promise.race([purposePromise, timeoutPromise]) as string;
+          console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
         } catch (e) {
-          console.log(`    ⚠️ 页面提取失败: ${e}`);
-        }
-
-        plugin.githubUrl = plugin.githubUrl || detail.githubUrl;
-        plugin.tags = plugin.tags || detail.tags;
-        console.log(`    → GitHub: ${plugin.githubUrl || '无'}`);
-
-        if (plugin.githubUrl) {
-          console.log(`    → 正在总结用途...`);
-          try {
-            const purposePromise = summarizePurpose(plugin.githubUrl, plugin.name);
-            const timeoutPromise = new Promise<string>((_, reject) => 
-              setTimeout(() => reject(new Error('summarize timeout')), 30000)
-            );
-            
-            plugin.purpose = await Promise.race([purposePromise, timeoutPromise]) as string;
-            console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
-          } catch (e) {
-            console.log(`    ⚠️ GitHub info error: ${e}`);
-            plugin.purpose = '暂无';
-          }
-        } else {
-          console.log(`    → 跳过 GitHub 信息获取（无 GitHub 链接）`);
+          console.log(`    ⚠️ 用途获取失败: ${e}`);
           plugin.purpose = '暂无';
         }
-      } catch (err) {
-        console.error(`    ⚠️ Error processing ${plugin.name}:`, err);
+      } else {
+        console.log(`    ⚠️ 无 GitHub 链接`);
+        plugin.purpose = '暂无';
       }
 
       console.log(`    ✓ 完成 ${plugin.name}\n`);
@@ -599,8 +551,6 @@ ${plugin.purpose || '暂无'}
 `;
     }
   }
-
-  await browser.close();
 
   const reportPath = join(OUTPUT_DIR, 'report.md');
   writeFileSync(reportPath, reportContent);
@@ -656,7 +606,7 @@ async function main() {
   }
 
   if (args.report) {
-    await generateReport(result);
+    await generateReport(result, !!args.limit);
     console.log(`\n✅ 报告已生成: ${join(OUTPUT_DIR, 'report.md')}`);
   }
 
@@ -665,6 +615,8 @@ async function main() {
     console.log('📊 By type:', result.byType);
     console.log('\n使用 --help 查看更多选项');
   }
+
+  process.exit(0);
 }
 
 main().catch(console.error);

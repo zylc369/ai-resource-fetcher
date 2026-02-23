@@ -13,12 +13,12 @@
 
 ### OpenSession
 
-- **更新日期**: 2025/12/16
+- **更新日期**: 未知
 - **链接**: [扩展详情](https://www.opencode.cafe/plugin/opensession) | [GitHub](https://github.com/R44VC0RP/opensession)
 - **标签**: web, opencode, sessions
 - **用途**: 
 
-OpenSession是一个Web查看器，专门用于查看OpenCode的会话记录。用户可以通过`npx opensession`命令直接运行，或全局安装后使用，它会在本地启动一个Web服务（默认端口3456），通过浏览器查看OpenCode的工作会话内容。该项目支持本地开发，开发者可以fork仓库后进行功能改进并提交Pull Request。
+OpenSession是一个用于查看OpenCode会话的Web查看器。用户可以通过运行`npx opensession`命令启动本地Web服务器（默认端口3456），在浏览器中查看OpenCode会话记录。该工具适合开发者查看和分析OpenCode的会话历史，支持通过npm全局安装或本地开发模式使用。
 
 ---
 
@@ -26,12 +26,16 @@ OpenSession是一个Web查看器，专门用于查看OpenCode的会话记录。�
 
 ### OpenPortal
 
-- **更新日期**: 2026/2/2
+- **更新日期**: 未知
 - **链接**: [扩展详情](https://www.opencode.cafe/plugin/openportal) | [GitHub](https://github.com/hosenur/portal)
 - **标签**: web, ui
 - **用途**: 
 
-这是一个为 OpenCode（AI 编程助手）打造的网页版图形界面。它让用户可以通过浏览器与 OpenCode 进行交互，支持会话管理、实时聊天、@文件引用、模型切换以及明暗主题切换。该项目的诞生是因为 OpenCode 官方 Web UI 尚在开发中，且移动端体验不佳。作者希望提供响应式的移动优先界面，方便在没有电脑时通过手机远程访问。使用时需要先安装 OpenCode，然后通过 `bunx openportal` 启动，Portal 会同时运行 OpenCode 服务器（默认端口 4000）和网页端（默认端口 3000），也可部署到 VPS 上配合 Tailscale 实现安全的外网访问。技术栈采用 React Router、IntentUI、Tailwind CSS 和 Nitro。
+这是一个为OpenCode（AI编程助手）打造的Web端界面工具。由于OpenCode官方UI暂不支持移动端响应式访问，作者开发了这款移动优先的Portal来满足在手机上远程使用OpenCode的需求。
+
+该工具可启动OpenCode服务并提供网页端UI，支持会话管理、实时聊天、@提及文件、选择AI模型以及深色/浅色主题切换。典型使用场景是将Portal部署在VPS上，再通过Tailscale等VPN从手机或其他设备安全连接访问。
+
+安装方式简单，使用`bunx openportal`即可直接运行，或全局安装后使用`openportal`命令启动。
 
 ---
 
@@ -39,17 +43,15 @@ OpenSession是一个Web查看器，专门用于查看OpenCode的会话记录。�
 
 ### Opencode PTY
 
-- **更新日期**: 2026/2/17
+- **更新日期**: 未知
 - **链接**: [扩展详情](https://www.opencode.cafe/plugin/opencode-pty) | [GitHub](https://github.com/shekohex/opencode-pty)
 - **标签**: pty, background, process
 - **用途**: 
 
-这是一个OpenCode的插件，提供交互式PTY（伪终端）管理功能。它让AI代理能够运行后台进程、发送交互式输入并随时读取输出，解决了OpenCode内置bash工具只能同步等待命令完成的限制。
+这是一个为OpenCode AI编程助手开发的终端管理插件。它解决了OpenCode内置bash工具只能同步等待命令完成的局限，让AI agent能够运行和管理后台进程。
 
-该插件主要用于：运行开发服务器（npm run dev、cargo watch）、监听模式（npm test -- --watch）、长时运行进程（数据库服务器、隧道）以及交互式程序（REPL、提示符）等场景。
+该插件提供以下核心功能：支持后台执行独立进程、同时管理多个终端会话、可发送交互式输入（如Ctrl+C、方向键）、带分页的输出读取、以及正则表达式过滤。其亮点包括进程退出时自动通知（无需轮询）、遵守OpenCode的权限设置、以及可选的React Web界面用于实时监控。
 
-核心功能包括：后台执行、多会话管理、交互式输入（支持Ctrl+C、方向键等）、输出缓冲区分页读取、正则表达式过滤、退出通知、Web UI界面以及基于WebSocket的实时流式输出。
-
-插件提供5个工具：pty_spawn创建会话、pty_write发送输入、pty_read读取输出、pty_list列出会话、pty_kill终止会话。用户可通过配置文件添加插件，或使用本地路径加载开发版本。
+通过提供的工具（pty_spawn、pty_write、pty_read、pty_list、pty_kill），AI可以启动开发服务器、运行监视模式测试、操作REPL、查看日志，并控制长时间运行的进程。这使得AI能够更好地管理需要持续运行的开发环境、构建任务和测试流程。
 
 ---

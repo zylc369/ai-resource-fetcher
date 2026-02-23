@@ -521,7 +521,7 @@ async function generateReport(result: Result, forceRefresh = false): Promise<voi
           console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
         } catch (e) {
           console.log(`    ⚠️ 用途获取失败: ${e}`);
-          plugin.purpose = '暂无';
+          plugin.purpose = `**总结用途出错，错误信息：**\n\`\`\`\n${e}\n\`\`\``;
         }
       } else {
         console.log(`    ⚠️ 无 GitHub 链接`);

@@ -27,6 +27,7 @@ interface CliArgs {
   count: boolean;
   report: boolean;
   help: boolean;
+  limit?: number;
 }
 
 const BASE_URL = 'https://www.opencode.cafe';
@@ -35,10 +36,19 @@ const OUTPUT_DIR = './output';
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
+  const limitArg = args.find(arg => arg.startsWith('--limit=') || arg.startsWith('-l='));
+  let limit: number | undefined;
+  if (limitArg) {
+    const parsed = parseInt(limitArg.split('=')[1], 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      limit = parsed;
+    }
+  }
   return {
     count: args.includes('--count') || args.includes('-c'),
     report: args.includes('--report') || args.includes('-r'),
     help: args.includes('--help') || args.includes('-h'),
+    limit,
   };
 }
 
@@ -51,12 +61,14 @@ OpenCode Cafe 爬虫
 选项:
   -c, --count    返回扩展数量
   -r, --report   生成中文分析报告
+  -l, --limit=N  限制处理的扩展数量（用于快速验证）
   -h, --help     显示帮助信息
 
 示例:
   bun run crawl --count        # 返回扩展数量
   bun run crawl --report       # 生成中文报告
   bun run crawl -c -r         # 同时执行
+  bun run crawl --report --limit=5  # 仅处理5个扩展用于验证
   `);
 }
 
@@ -263,49 +275,52 @@ function extractPurposeFromReadme(content: string, extName: string): string {
   return '暂无';
 }
 
-async function summarizePurpose(content: string, extName: string): Promise<string> {
-  if (!content || content.length < 20) {
+async function summarizePurpose(githubUrl: string, extName: string): Promise<string> {
+  if (!githubUrl) {
     return '暂无';
   }
-  
-  return summarizeWithAI(content, extName);
+
+  const readmeUrl = githubUrl
+    .replace('github.com/', 'raw.githubusercontent.com/')
+    .replace('/blob/main/', '/main/')
+    .replace('/blob/master/', '/master/');
+
+  return summarizeWithAI(readmeUrl, extName);
 }
 
-async function summarizeWithAI(content: string, extName: string): Promise<string> {
+async function summarizeWithAI(readmeUrl: string, extName: string): Promise<string> {
   try {
-    const prompt = `用简洁的中文（500字以内）总结这个 OpenCode 扩展的用途，直接返回总结，不需要任何格式或前缀。`;
+    // const prompt = `读取${readmeUrl}文件内容，用中文总结它的用途、主要的功能特性，返回MarkDown格式的总结内容（!!!重要：不要返回H1、H2这种标题格式!!!）。`;
+    const prompt = `读取${readmeUrl}文件内容，用简洁的中文（500字以内）总结这个 OpenCode 扩展的用途，直接返回总结，不需要任何格式或前缀。`
     
-    const result = await $`echo "${content.slice(0, 2000)}" | opencode run "${prompt}" -m opencode/big-pickle`.text();
+    const result = await $`opencode run "${prompt}" -m opencode/big-pickle`.text();
     
     const cleaned = result
       .replace(/^> build · big-pickle.*$/gm, '')
       .replace(/^% WebFetch.*$/gm, '')
-      .replace(/^✱.*$/gm, '')
-      .replace(/^→.*$/gm, '')
-      .replace(/^需要先.*$/gm, '')
-      .replace(/^提供.*/gm, (match) => match)
-      .replace(/^\d+:/gm, '')
-      .replace(/^itschel.*$/gm, '')
-      .replace(/^\[.*m$/gm, '')
-      .replace(/\x1b\[[0-9;]*m/g, '')
-      .replace(/\n{2,}/g, '\n')
+      // .replace(/^✱.*$/gm, '')
+      // .replace(/^→.*$/gm, '')
+      // .replace(/^需要先.*$/gm, '')
+      // .replace(/^提供.*/gm, (match) => match)
+      // .replace(/^\d+:/gm, '')
+      // .replace(/^itschel.*$/gm, '')
+      // .replace(/^\[.*m$/gm, '')
+      // .replace(/\x1b\[[0-9;]*m/g, '')
+      // .replace(/\n{3,}/g, '\n\n')
       .trim();
     
-    const lines = cleaned.split('\n').filter(l => l.trim().length > 0);
-    const summary = lines[lines.length - 1] || lines[0] || '';
-    
-    if (summary.length > 5) {
-      return summary.slice(0, 100);
+    if (cleaned.length > 10) {
+      return cleaned;
     }
     
-    return extractPurposeFromReadme(content, extName);
+    return '暂无';
   } catch (error) {
     console.error(`  ⚠️ AI summarization error: ${error}`);
-    return extractPurposeFromReadme(content, extName);
+    return '暂无';
   }
 }
 
-async function crawlExtensions(showProgress = true): Promise<Result> {
+async function crawlExtensions(showProgress = true, limit?: number): Promise<Result> {
   if (showProgress) console.log('🚀 Starting crawler...');
 
   const browser = await chromium.launch({ headless: true });
@@ -324,7 +339,12 @@ async function crawlExtensions(showProgress = true): Promise<Result> {
       return elements.map((el) => el.getAttribute('href')).filter(Boolean) as string[];
     });
 
-    const uniqueUrls = [...new Set(cards.filter((url) => url.startsWith('/plugin/')))];
+    let uniqueUrls = [...new Set(cards.filter((url) => url.startsWith('/plugin/')))];
+    
+    if (limit && limit > 0) {
+      uniqueUrls = uniqueUrls.slice(0, limit);
+      if (showProgress) console.log(`📊 限制处理前 ${limit} 个扩展`);
+    }
 
     if (showProgress) console.log(`📊 Found ${uniqueUrls.length} extension links, crawling details...`);
 
@@ -500,20 +520,13 @@ async function generateReport(result: Result): Promise<void> {
         console.log(`    → GitHub: ${plugin.githubUrl || '无'}`);
 
         if (plugin.githubUrl) {
-          console.log(`    → 正在获取 GitHub README...`);
+          console.log(`    → 正在总结用途...`);
           try {
             const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
             plugin.lastUpdated = githubInfo.lastUpdated;
-            console.log(`    → README 内容长度: ${githubInfo.readmeContent?.length || 0}`);
 
-            if (githubInfo.readmeContent) {
-              console.log(`    → 正在总结用途...`);
-              plugin.purpose = await summarizePurpose(githubInfo.readmeContent, plugin.name);
-              console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
-            } else {
-              console.log(`    ⚠️ 无法获取 README 内容`);
-              plugin.purpose = '暂无';
-            }
+            plugin.purpose = await summarizePurpose(plugin.githubUrl, plugin.name);
+            console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
           } catch (e) {
             console.log(`    ⚠️ GitHub info error: ${e}`);
             plugin.purpose = '暂无';
@@ -545,7 +558,9 @@ async function generateReport(result: Result): Promise<void> {
 - **更新日期**: ${lastUpdated}
 - **链接**: [扩展详情](${plugin.url}) | ${githubLink}
 - **标签**: ${tagsStr}
-- **用途**: ${plugin.purpose || '暂无'}
+- **用途**: 
+
+${plugin.purpose || '暂无'}
 
 ---
 `;
@@ -586,17 +601,21 @@ async function main() {
       console.log(existingData.total);
       return;
     }
-    const result = await crawlExtensions(false);
+    const result = await crawlExtensions(false, args.limit);
     console.log(result.total);
     return;
   }
 
   let result: Result;
-  if (args.report && existingData && existingData.plugins.length > 0) {
+  const shouldUseExistingData = args.report && existingData && existingData.plugins.length > 0 && !args.limit;
+  if (shouldUseExistingData) {
     console.log('📂 使用已有的爬取数据...');
     result = existingData;
   } else {
-    result = await crawlExtensions(!args.report);
+    if (args.limit) {
+      console.log(`📂 忽略已有数据，使用 --limit=${args.limit} 重新爬取...`);
+    }
+    result = await crawlExtensions(!args.report, args.limit);
   }
 
   if (args.report) {

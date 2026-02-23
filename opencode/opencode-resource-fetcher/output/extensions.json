@@ -3,7 +3,7 @@
   "byType": {
     "Tool": 1,
     "Web View": 1,
-    "Plugin": 1
+    "Plugin": 3
   },
   "plugins": [
     {
@@ -18,8 +18,7 @@
         "web",
         "opencode",
         "sessions"
-      ],
-      "purpose": "OpenSession是一个用于查看OpenCode会话记录的Web工具。它可以在本地启动一个Web服务器（默认端口3456），让你通过浏览器直观地浏览和查看OpenCode的会话内容。\n\n使用方式很简单：直接运行`npx opensession`即可启动，或全局安装后使用`opensession`命令。启动后会显示一个本地Web界面，按Ctrl+C停止服务。\n\n该项目也支持本地开发，克隆仓库后运行`npm install && npm run dev`即可。项目欢迎社区贡献，可以通过Fork和Pull Request的方式参与开发。"
+      ]
     },
     {
       "id": "openportal",
@@ -32,8 +31,7 @@
       "tags": [
         "web",
         "ui"
-      ],
-      "purpose": "这是一个名为OpenCode Portal的Web应用，为OpenCode AI编程助手提供基于浏览器的图形界面。它可以连接运行中的OpenCode服务器，实现会话管理、实时聊天、文件提及、模型选择和主题切换等功能。该项目的核心优势是移动端优先的响应式设计，解决了官方UI不支持移动端的问题。用户可以通过Tailscale等VPN在手机或远程设备上安全访问部署在VPS上的OpenCode实例。"
+      ]
     },
     {
       "id": "opencode-pty",
@@ -47,8 +45,44 @@
         "pty",
         "background",
         "process"
-      ],
-      "purpose": "这是一个OpenCode插件，提供交互式伪终端（PTY）管理功能。它解决了OpenCode内置bash工具只能同步执行命令的问题，允许AI代理在后台运行开发服务器、监听模式、长期运行的进程以及交互式程序（如REPL）。该插件支持多会话管理、发送按键和转义序列（如Ctrl+C）、带分页的输出缓冲区读取、正则表达式过滤、进程退出通知，以及基于WebSocket的实时流式输出。还提供现代化的Web界面用于监控和管理终端会话。"
+      ]
+    },
+    {
+      "id": "opencode-antigravity-auth",
+      "name": "Opencode Antigravity Auth",
+      "description": "Submitted by Noè · Published December 18, 2025",
+      "type": "Plugin",
+      "author": "Plugin",
+      "url": "https://www.opencode.cafe/plugin/opencode-antigravity-auth",
+      "githubUrl": "https://github.com/NoeFabris/opencode-antigravity-auth",
+      "tags": [
+        "opencode",
+        "plugin",
+        "auth",
+        "oauth",
+        "google",
+        "antigravity",
+        "gemini",
+        "claude",
+        "opus",
+        "sonnet"
+      ]
+    },
+    {
+      "id": "opencode-helicone-session",
+      "name": "OpenCode Helicone Session",
+      "description": "Submitted by Ryan Vogel · Published December 18, 2025",
+      "type": "Plugin",
+      "author": "Plugin",
+      "url": "https://www.opencode.cafe/plugin/opencode-helicone-session",
+      "githubUrl": "https://github.com/H2Shami/opencode-helicone-session",
+      "tags": [
+        "s dashboard",
+        "helicone",
+        "analytics",
+        "observability",
+        "session-tracking"
+      ]
     }
   ]
 }

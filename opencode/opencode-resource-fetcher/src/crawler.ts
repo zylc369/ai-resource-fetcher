@@ -429,16 +429,6 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
           tags: ext.tags,
         };
 
-        if (ext.githubUrl && showProgress) {
-          if (showProgress) console.log(`    → 正在总结用途...`);
-          try {
-            extension.purpose = await summarizePurpose(ext.githubUrl, extension.name);
-            if (showProgress) console.log(`    → 用途: ${extension.purpose?.slice(0, 30)}...`);
-          } catch (e) {
-            if (showProgress) console.log(`    ⚠️ 用途获取失败`);
-          }
-        }
-
         extensions.push(extension);
         byType[extension.type] = (byType[extension.type] || 0) + 1;
 
@@ -531,7 +521,7 @@ async function generateReport(result: Result): Promise<void> {
 
         let detail = { tags: [] as string[], githubUrl: undefined as string | undefined };
         try {
-          detail = await page.evaluate(() => {
+          const detailPromise = page.evaluate(() => {
             const body = document.body.innerText;
             const match = body.match(/([a-z0-9][a-z0-9\s-]*)\n\s*View Repository/i);
             let tags: string[] = [];
@@ -546,6 +536,12 @@ async function generateReport(result: Result): Promise<void> {
 
             return { tags, githubUrl };
           });
+          
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('evaluate timeout')), 5000)
+          );
+          
+          detail = await Promise.race([detailPromise, timeoutPromise]) as typeof detail;
         } catch (e) {
           console.log(`    ⚠️ 页面提取失败: ${e}`);
         }
@@ -557,10 +553,12 @@ async function generateReport(result: Result): Promise<void> {
         if (plugin.githubUrl) {
           console.log(`    → 正在总结用途...`);
           try {
-            const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
-            plugin.lastUpdated = githubInfo.lastUpdated;
-
-            plugin.purpose = await summarizePurpose(plugin.githubUrl, plugin.name);
+            const purposePromise = summarizePurpose(plugin.githubUrl, plugin.name);
+            const timeoutPromise = new Promise<string>((_, reject) => 
+              setTimeout(() => reject(new Error('summarize timeout')), 30000)
+            );
+            
+            plugin.purpose = await Promise.race([purposePromise, timeoutPromise]) as string;
             console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
           } catch (e) {
             console.log(`    ⚠️ GitHub info error: ${e}`);

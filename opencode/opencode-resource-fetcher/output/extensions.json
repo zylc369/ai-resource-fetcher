@@ -2,8 +2,7 @@
   "total": 55,
   "byType": {
     "Tool": 1,
-    "Web View": 1,
-    "Plugin": 1
+    "Web View": 1
   },
   "plugins": [
     {
@@ -31,20 +30,6 @@
       "tags": [
         "web",
         "ui"
-      ]
-    },
-    {
-      "id": "opencode-pty",
-      "name": "Opencode PTY",
-      "description": "Submitted by Anonymous · Published December 18, 2025",
-      "type": "Plugin",
-      "author": "Plugin",
-      "url": "https://www.opencode.cafe/plugin/opencode-pty",
-      "githubUrl": "https://github.com/shekohex/opencode-pty",
-      "tags": [
-        "pty",
-        "background",
-        "process"
       ]
     }
   ]

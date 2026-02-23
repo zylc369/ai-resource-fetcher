@@ -487,15 +487,19 @@ async function generateReport(result: Result, forceRefresh = false): Promise<voi
 - **分类数量**: ${Object.keys(pluginsByType).length}
 
 ### 分类统计
+| 类型 | 数量 |
+|------|------|
 `;
 
   for (const [type, plugins] of Object.entries(pluginsByType)) {
-    reportContent += `- **${type}**: ${plugins.length} 个\n`;
+    reportContent += `| ${type} | ${plugins.length} |\n`;
   }
 
   // Generate report grouped by type
+  let typeIndex = 0;
   for (const [type, plugins] of Object.entries(pluginsByType)) {
-    reportContent += `\n## ${type}\n\n`;
+    typeIndex++;
+    reportContent += `\n## ${typeIndex}. ${type} (${plugins.length})\n\n`;
 
     let processed = 0;
     const totalToProcess = plugins.length;
@@ -538,7 +542,7 @@ async function generateReport(result: Result, forceRefresh = false): Promise<voi
         ? plugin.tags.join(', ') 
         : '无';
 
-      reportContent += `### ${plugin.name}
+      reportContent += `### ${processed}. ${plugin.name}
 
 - **更新日期**: ${lastUpdated}
 - **链接**: [扩展详情](${plugin.url}) | ${githubLink}

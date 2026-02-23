@@ -273,7 +273,7 @@ async function summarizePurpose(content: string, extName: string): Promise<strin
 
 async function summarizeWithAI(content: string, extName: string): Promise<string> {
   try {
-    const prompt = `用简洁的中文（30-50字）总结这个 OpenCode 扩展的用途，直接返回总结，不需要任何格式或前缀。`;
+    const prompt = `用简洁的中文（500字以内）总结这个 OpenCode 扩展的用途，直接返回总结，不需要任何格式或前缀。`;
     
     const result = await $`echo "${content.slice(0, 2000)}" | opencode run "${prompt}" -m opencode/big-pickle`.text();
     

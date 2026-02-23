@@ -15,14 +15,12 @@ interface Extension {
   lastUpdated?: string;
   purpose?: string;
   tags?: string[];
-  readmeUrl?: string;
 }
 
 interface Result {
   total: number;
   byType: Record<string, number>;
   plugins: Extension[];
-  lastFetched?: string;
 }
 
 interface CliArgs {
@@ -30,8 +28,6 @@ interface CliArgs {
   report: boolean;
   help: boolean;
   limit?: number;
-  parallel?: number;
-  force: boolean;
 }
 
 const BASE_URL = 'https://www.opencode.cafe';
@@ -41,7 +37,6 @@ const OUTPUT_DIR = './output';
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
   let limit: number | undefined;
-  let parallel: number | undefined;
   
   const limitEqIndex = args.findIndex(arg => arg.startsWith('--limit=') || arg.startsWith('-l='));
   if (limitEqIndex !== -1) {
@@ -59,31 +54,12 @@ function parseArgs(): CliArgs {
       limit = parsed;
     }
   }
-
-  const parallelEqIndex = args.findIndex(arg => arg.startsWith('--parallel=') || arg.startsWith('-p='));
-  if (parallelEqIndex !== -1) {
-    const parallelStr = args[parallelEqIndex].split('=')[1];
-    const parsed = parseInt(parallelStr, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      parallel = parsed;
-    }
-  }
-  
-  const parallelIndex = args.findIndex(arg => arg === '--parallel' || arg === '-p');
-  if (parallelIndex !== -1 && parallelIndex + 1 < args.length) {
-    const parsed = parseInt(args[parallelIndex + 1], 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      parallel = parsed;
-    }
-  }
   
   return {
     count: args.includes('--count') || args.includes('-c'),
     report: args.includes('--report') || args.includes('-r'),
     help: args.includes('--help') || args.includes('-h'),
     limit,
-    parallel: parallel || 3,
-    force: args.includes('--force') || args.includes('-f'),
   };
 }
 
@@ -94,20 +70,16 @@ OpenCode Cafe 爬虫
 用法: bun run crawl [选项]
 
 选项:
-  -c, --count      返回扩展数量
-  -r, --report     生成中文分析报告
-  -l, --limit=N    限制处理的扩展数量（用于快速验证）
-  -p, --parallel=N 并行处理线程数（默认3）
-  -f, --force      强制实时获取数据，忽略缓存
-  -h, --help       显示帮助信息
+  -c, --count    返回扩展数量
+  -r, --report   生成中文分析报告
+  -l, --limit=N  限制处理的扩展数量（用于快速验证）
+  -h, --help     显示帮助信息
 
 示例:
-  bun run crawl --count           # 返回扩展数量
-  bun run crawl --report          # 生成中文报告
-  bun run crawl -c -r            # 同时执行
-  bun run crawl --report --limit=5   # 仅处理5个扩展用于验证
-  bun run crawl --report --parallel=5 # 使用5个并行线程
-  bun run crawl --report --force      # 强制实时获取数据
+  bun run crawl --count        # 返回扩展数量
+  bun run crawl --report       # 生成中文报告
+  bun run crawl -c -r         # 同时执行
+  bun run crawl --report --limit=5  # 仅处理5个扩展用于验证
   `);
 }
 
@@ -314,28 +286,23 @@ function extractPurposeFromReadme(content: string, extName: string): string {
   return '暂无';
 }
 
-async function summarizePurpose(githubUrl: string, extName: string, existingReadmeUrl?: string): Promise<{ purpose: string; readmeUrl: string }> {
+async function summarizePurpose(githubUrl: string, extName: string): Promise<string> {
   if (!githubUrl) {
-    return { purpose: '暂无', readmeUrl: '' };
+    return '暂无';
   }
 
-  let readmeUrl = existingReadmeUrl || '';
+  let readmeUrl = githubUrl
+    .replace('github.com/', 'raw.githubusercontent.com/');
   
-  if (!readmeUrl) {
-    readmeUrl = githubUrl
-      .replace('github.com/', 'raw.githubusercontent.com/');
-    
-    if (!readmeUrl.includes('/main/') && !readmeUrl.includes('/master/')) {
-      readmeUrl = readmeUrl + '/main/README.md';
-    } else {
-      readmeUrl = readmeUrl
-        .replace('/blob/main/', '/main/')
-        .replace('/blob/master/', '/master/');
-    }
+  if (!readmeUrl.includes('/main/') && !readmeUrl.includes('/master/')) {
+    readmeUrl = readmeUrl + '/main/README.md';
+  } else {
+    readmeUrl = readmeUrl
+      .replace('/blob/main/', '/main/')
+      .replace('/blob/master/', '/master/');
   }
 
-  const purpose = await summarizeWithAI(readmeUrl, extName);
-  return { purpose, readmeUrl };
+  return summarizeWithAI(readmeUrl, extName);
 }
 
 async function summarizeWithAI(readmeUrl: string, extName: string): Promise<string> {
@@ -497,72 +464,14 @@ async function crawlExtensions(showProgress = true, limit?: number): Promise<Res
   return result;
 }
 
-async function generateReport(result: Result, forceRefresh = false, parallelCount = 3): Promise<void> {
+async function generateReport(result: Result, forceRefresh = false): Promise<void> {
   console.log('\n📝 正在生成中文分析报告...');
-  console.log(`📊 并行线程数: ${parallelCount}`);
   
   if (!existsSync(OUTPUT_DIR)) {
     mkdirSync(OUTPUT_DIR, { recursive: true });
   }
 
-  const pluginsToProcess = result.plugins;
-  const totalPlugins = pluginsToProcess.length;
-  let processedCount = 0;
-  let activeCount = 0;
-  const semaphore = { count: 0 };
-
-  async function processPlugin(plugin: Extension): Promise<void> {
-    const currentIndex = ++processedCount;
-    console.log(`  📄 [${currentIndex}/${totalPlugins}] 处理: ${plugin.name}`);
-
-    if (plugin.githubUrl) {
-      console.log(`    → GitHub: ${plugin.githubUrl}`);
-      console.log(`    → 正在总结用途...`);
-      
-      try {
-        const purposePromise = summarizePurpose(plugin.githubUrl, plugin.name, plugin.readmeUrl);
-        const timeoutPromise = new Promise<{ purpose: string; readmeUrl: string }>((_, reject) => 
-          setTimeout(() => reject(new Error('summarize timeout')), 60000)
-        );
-        
-        const result = await Promise.race([purposePromise, timeoutPromise]) as { purpose: string; readmeUrl: string };
-        plugin.purpose = result.purpose;
-        plugin.readmeUrl = result.readmeUrl;
-        console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
-      } catch (e) {
-        console.log(`    ⚠️ 用途获取失败: ${e}`);
-        plugin.purpose = `**总结用途出错，错误信息：**\n\`\`\`\n${e}\n\`\`\``;
-      }
-    } else {
-      console.log(`    ⚠️ 无 GitHub 链接`);
-      plugin.purpose = '暂无';
-    }
-
-    console.log(`    ✓ 完成 ${plugin.name}\n`);
-  }
-
-  async function worker(plugins: Extension[]): Promise<void> {
-    for (const plugin of plugins) {
-      await processPlugin(plugin);
-      semaphore.count--;
-    }
-  }
-
-  const workers: Promise<void>[] = [];
-  const chunkSize = Math.ceil(pluginsToProcess.length / parallelCount);
-  
-  for (let i = 0; i < parallelCount; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(start + chunkSize, pluginsToProcess.length);
-    const chunk = pluginsToProcess.slice(start, end);
-    if (chunk.length > 0) {
-      workers.push(worker(chunk));
-    }
-  }
-
-  await Promise.all(workers);
-
-  // Group plugins by type for report
+  // Group plugins by type
   const pluginsByType: Record<string, Extension[]> = {};
   for (const plugin of result.plugins) {
     if (!pluginsByType[plugin.type]) {
@@ -586,14 +495,40 @@ async function generateReport(result: Result, forceRefresh = false, parallelCoun
     reportContent += `| ${type} | ${plugins.length} |\n`;
   }
 
+  // Generate report grouped by type
   let typeIndex = 0;
   for (const [type, plugins] of Object.entries(pluginsByType)) {
     typeIndex++;
     reportContent += `\n## ${typeIndex}. ${type} (${plugins.length})\n\n`;
 
     let processed = 0;
+    const totalToProcess = plugins.length;
+    
     for (const plugin of plugins) {
       processed++;
+      console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name}`);
+
+      if (plugin.githubUrl) {
+        console.log(`    → GitHub: ${plugin.githubUrl}`);
+        console.log(`    → 正在总结用途...`);
+        try {
+          const purposePromise = summarizePurpose(plugin.githubUrl, plugin.name);
+          const timeoutPromise = new Promise<string>((_, reject) => 
+            setTimeout(() => reject(new Error('summarize timeout')), 60000)
+          );
+          
+          plugin.purpose = await Promise.race([purposePromise, timeoutPromise]) as string;
+          console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
+        } catch (e) {
+          console.log(`    ⚠️ 用途获取失败: ${e}`);
+          plugin.purpose = `**总结用途出错，错误信息：**\n\`\`\`\n${e}\n\`\`\``;
+        }
+      } else {
+        console.log(`    ⚠️ 无 GitHub 链接`);
+        plugin.purpose = '暂无';
+      }
+
+      console.log(`    ✓ 完成 ${plugin.name}\n`);
 
       const lastUpdated = plugin.lastUpdated 
         ? new Date(plugin.lastUpdated).toLocaleDateString('zh-CN')
@@ -640,24 +575,11 @@ async function main() {
 
   let existingData: Result | null = null;
   const dataPath = join(OUTPUT_DIR, 'extensions.json');
-  const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 1 day
-
   if (existsSync(dataPath)) {
     try {
       existingData = JSON.parse(readFileSync(dataPath, 'utf-8'));
     } catch {
       // ignore
-    }
-  }
-
-  // Check if cached data is still valid
-  let isCacheValid = false;
-  if (existingData && existingData.lastFetched) {
-    const lastFetchedTime = new Date(existingData.lastFetched).getTime();
-    const now = Date.now();
-    isCacheValid = (now - lastFetchedTime) < CACHE_EXPIRY_MS;
-    if (!isCacheValid) {
-      console.log('📂 缓存数据已过期（超过1天），将重新获取...');
     }
   }
 
@@ -673,36 +595,22 @@ async function main() {
 
   let result: Result;
   const hasValidLimit = args.limit && args.limit > 0;
-  const shouldUseExistingData = args.report && 
-    existingData && 
-    existingData.plugins.length > 0 && 
-    !args.force && 
-    !hasValidLimit &&
-    isCacheValid;
+  const existingDataMatchesLimit = existingData && existingData.plugins.length >= (args.limit || Infinity);
+  const shouldUseExistingData = args.report && existingData && existingData.plugins.length > 0 && !hasValidLimit;
   
   if (shouldUseExistingData) {
-    console.log('📂 使用已有的缓存数据...');
-    console.log(`📅 数据更新时间: ${existingData.lastFetched}`);
+    console.log('📂 使用已有的爬取数据...');
     result = existingData;
   } else {
-    if (args.force) {
-      console.log('📂 强制重新获取数据（--force）...');
-    } else if (hasValidLimit) {
-      console.log(`📂 使用 --limit=${args.limit} 重新爬取...`);
-    } else if (!isCacheValid) {
-      console.log('📂 缓存数据过期，重新获取...');
+    if (hasValidLimit) {
+      console.log(`📂 忽略已有数据，使用 --limit=${args.limit} 重新爬取...`);
     }
-    result = await crawlExtensions(true, args.limit);
-    
-    // Update cache with current timestamp
-    result.lastFetched = new Date().toISOString();
-    const outputPath = join(OUTPUT_DIR, 'extensions.json');
-    writeFileSync(outputPath, JSON.stringify(result, null, 2));
-    console.log(`💾 数据已保存并更新缓存时间`);
+    const showProgressForCrawl = hasValidLimit ? true : !args.report;
+    result = await crawlExtensions(showProgressForCrawl, args.limit);
   }
 
   if (args.report) {
-    await generateReport(result, !!args.force, args.parallel || 3);
+    await generateReport(result, !!args.limit);
     console.log(`\n✅ 报告已生成: ${join(OUTPUT_DIR, 'report.md')}`);
   }
 

@@ -19,7 +19,7 @@
         "opencode",
         "sessions"
       ],
-      "purpose": "OpenSession 是一个用于查看 OpenCode 会话的 Web 浏览器工具。安装后会在本地启动一个 Web 服务器（默认 http://localhost:3456），用户可以通过浏览器实时查看 OpenCode 的会话记录。该工具支持直接使用 npx 运行或全局安装使用，适合开发者在本地查看和调试 OpenCode 会话数据。"
+      "purpose": "OpenSession是一个用于查看OpenCode会话记录的Web工具。它可以在本地启动一个Web服务器（默认端口3456），让你通过浏览器直观地浏览和查看OpenCode的会话内容。\n\n使用方式很简单：直接运行`npx opensession`即可启动，或全局安装后使用`opensession`命令。启动后会显示一个本地Web界面，按Ctrl+C停止服务。\n\n该项目也支持本地开发，克隆仓库后运行`npm install && npm run dev`即可。项目欢迎社区贡献，可以通过Fork和Pull Request的方式参与开发。"
     },
     {
       "id": "openportal",
@@ -33,7 +33,7 @@
         "web",
         "ui"
       ],
-      "purpose": "OpenCode Portal 是一个为 OpenCode（AI 编程助手）打造的网页版用户界面。它可以连接本地运行的 OpenCode 服务器，提供会话管理、实时聊天、文件引用、模型选择和深色/浅色主题切换等功能。由于 OpenCode 官方 Web UI 目前仍在开发中，且不支持移动端访问，该项目应运而生，专注于移动端优先的响应式设计。用户可以将 Portal 部署在 VPS 上，配合 Tailscale 等 VPN 从手机或远程设备安全访问 OpenCode 实例。技术栈包括 React Router、IntentUI、Tailwind CSS、Nitro 服务器和 OpenCode SDK。"
+      "purpose": "这是一个名为OpenCode Portal的Web应用，为OpenCode AI编程助手提供基于浏览器的图形界面。它可以连接运行中的OpenCode服务器，实现会话管理、实时聊天、文件提及、模型选择和主题切换等功能。该项目的核心优势是移动端优先的响应式设计，解决了官方UI不支持移动端的问题。用户可以通过Tailscale等VPN在手机或远程设备上安全访问部署在VPS上的OpenCode实例。"
     },
     {
       "id": "opencode-pty",
@@ -48,7 +48,7 @@
         "background",
         "process"
       ],
-      "purpose": "这是一个OpenCode的扩展插件，提供交互式伪终端（PTY）管理功能。OpenCode内置的bash工具只能同步运行命令，等待命令完成后才能继续，这个插件解决了无法运行后台进程的痛点。\n\n该插件支持：后台执行长期运行的任务（如开发服务器npm run dev、数据库服务）、多终端会话管理、实时交互输入（可发送Ctrl+C、方向键等）、输出缓冲与分页读取、支持正则表达式过滤日志、进程退出时自动通知、AI代理可随时读取和写入终端内容。此外还提供Web界面，通过slash命令可打开浏览器查看所有终端会话的实时输出，支持WebSocket流式更新。\n\n主要工具包括：pty_spawn（创建终端会话）、pty_write（发送输入）、pty_read（读取输出）、pty_list（列出所有会话）、pty_kill（终止会话）。适用于需要长时间运行的服务、监视模式、交互式REPL等场景，让AI代理能更灵活地管理开发环境。"
+      "purpose": "这是一个OpenCode插件，提供交互式伪终端（PTY）管理功能。它解决了OpenCode内置bash工具只能同步执行命令的问题，允许AI代理在后台运行开发服务器、监听模式、长期运行的进程以及交互式程序（如REPL）。该插件支持多会话管理、发送按键和转义序列（如Ctrl+C）、带分页的输出缓冲区读取、正则表达式过滤、进程退出通知，以及基于WebSocket的实时流式输出。还提供现代化的Web界面用于监控和管理终端会话。"
     }
   ]
 }

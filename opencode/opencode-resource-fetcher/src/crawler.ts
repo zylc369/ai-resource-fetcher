@@ -522,20 +522,16 @@ async function generateReport(result: Result): Promise<void> {
     
     for (const plugin of plugins) {
       processed++;
-      const hasPurpose = plugin.purpose && plugin.purpose !== '暂无';
-      
-      if (hasPurpose) {
-        console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name} (已有用途)`);
-        console.log(`    ✓ 已有用途数据`);
-      } else {
-        console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name}`);
-        console.log(`    → 正在访问扩展详情页...`);
-        try {
-          await page.goto(plugin.url, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => null);
-          await page.waitForTimeout(300);
-          console.log(`    → 正在提取页面信息...`);
+      console.log(`  📄 [${processed}/${totalToProcess}] 处理: ${plugin.name}`);
+      console.log(`    → 正在访问扩展详情页...`);
+      try {
+        await page.goto(plugin.url, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => null);
+        await page.waitForTimeout(500);
+        console.log(`    → 正在提取页面信息...`);
 
-          const detail = await page.evaluate(() => {
+        let detail = { tags: [] as string[], githubUrl: undefined as string | undefined };
+        try {
+          detail = await page.evaluate(() => {
             const body = document.body.innerText;
             const match = body.match(/([a-z0-9][a-z0-9\s-]*)\n\s*View Repository/i);
             let tags: string[] = [];
@@ -550,30 +546,32 @@ async function generateReport(result: Result): Promise<void> {
 
             return { tags, githubUrl };
           });
+        } catch (e) {
+          console.log(`    ⚠️ 页面提取失败: ${e}`);
+        }
 
-          plugin.githubUrl = plugin.githubUrl || detail.githubUrl;
-          plugin.tags = plugin.tags || detail.tags;
-          console.log(`    → GitHub: ${plugin.githubUrl || '无'}`);
+        plugin.githubUrl = plugin.githubUrl || detail.githubUrl;
+        plugin.tags = plugin.tags || detail.tags;
+        console.log(`    → GitHub: ${plugin.githubUrl || '无'}`);
 
-          if (plugin.githubUrl) {
-            console.log(`    → 正在总结用途...`);
-            try {
-              const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
-              plugin.lastUpdated = githubInfo.lastUpdated;
+        if (plugin.githubUrl) {
+          console.log(`    → 正在总结用途...`);
+          try {
+            const githubInfo = await getGitHubInfo(page, plugin.githubUrl);
+            plugin.lastUpdated = githubInfo.lastUpdated;
 
-              plugin.purpose = await summarizePurpose(plugin.githubUrl, plugin.name);
-              console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
-            } catch (e) {
-              console.log(`    ⚠️ GitHub info error: ${e}`);
-              plugin.purpose = '暂无';
-            }
-          } else {
-            console.log(`    → 跳过 GitHub 信息获取（无 GitHub 链接）`);
+            plugin.purpose = await summarizePurpose(plugin.githubUrl, plugin.name);
+            console.log(`    → 用途: ${plugin.purpose?.slice(0, 50)}...`);
+          } catch (e) {
+            console.log(`    ⚠️ GitHub info error: ${e}`);
             plugin.purpose = '暂无';
           }
-        } catch (err) {
-          console.error(`    ⚠️ Error processing ${plugin.name}:`, err);
+        } else {
+          console.log(`    → 跳过 GitHub 信息获取（无 GitHub 链接）`);
+          plugin.purpose = '暂无';
         }
+      } catch (err) {
+        console.error(`    ⚠️ Error processing ${plugin.name}:`, err);
       }
 
       console.log(`    ✓ 完成 ${plugin.name}\n`);
